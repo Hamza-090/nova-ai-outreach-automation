@@ -1,0 +1,1856 @@
+{
+  "name": "LinkedIn Lead Scraper & Outreach Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "search-leads",
+        "responseMode": "lastNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        -80
+      ],
+      "id": "2a09c793-9f58-4f00-a789-e1273528921f",
+      "name": "01 — Webhook — Search Leads",
+      "webhookId": "b19f30d8-0966-4e35-80b9-2402a79da1b8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c777bafb-cb6f-424b-9304-8745f99c382a",
+              "name": "job_title",
+              "value": "={{$json.body.job_title}}",
+              "type": "string"
+            },
+            {
+              "id": "3f072389-b77a-4417-8820-dec7d7acf7a0",
+              "name": "location",
+              "value": "={{$json.body.location}}",
+              "type": "string"
+            },
+            {
+              "id": "a1daefba-b4e4-47d9-be44-c4fcce227b51",
+              "name": "industry",
+              "value": "={{$json.body.industry}}",
+              "type": "string"
+            },
+            {
+              "id": "a7050289-0447-4e66-b97e-20b6e1720198",
+              "name": "keywords",
+              "value": "={{$json.body.keywords}}",
+              "type": "string"
+            },
+            {
+              "id": "a9a7de21-993e-4258-ab7c-09327702ec15",
+              "name": "max_results",
+              "value": "={{$json.body.max_results}}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        -80
+      ],
+      "id": "265333d9-208a-4a43-b748-a1b7afe28f70",
+      "name": "02 — Prepare Search Filters"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.results || [];\n\nconst leads = [];\n\nfunction cleanLinkedInUrl(url) {\n  if (!url || typeof url !== 'string') return '';\n\n  // Remove markdown link formatting if present\n  const markdownMatch = url.match(/\\((https?:\\/\\/[^)]+)\\)/);\n  if (markdownMatch) {\n    url = markdownMatch[1];\n  }\n\n  // Remove trailing slash\n  url = url.trim().replace(/\\/+$/, '');\n\n  // Convert localized LinkedIn domains to www.linkedin.com\n  url = url.replace(\n    /^https?:\\/\\/([a-z]{2}\\.)?linkedin\\.com/i,\n    'https://www.linkedin.com'\n  );\n\n  return url;\n}\n\nfunction cleanLocation(profile) {\n  const city = String(profile.city || '').trim();\n  const countryCode = String(profile.country_code || '').trim();\n\n  if (!city) return '';\n\n  // If ScrapeGraphAI already returned a complete location,\n  // don't append the country again.\n  const normalizedCity = city.toLowerCase();\n\n  const countryMap = {\n    US: 'United States',\n    IN: 'India',\n    GB: 'United Kingdom',\n    CA: 'Canada',\n    AU: 'Australia',\n    AE: 'United Arab Emirates',\n    SG: 'Singapore'\n  };\n\n  const country = countryMap[countryCode] || countryCode;\n\n  if (\n    country &&\n    normalizedCity.endsWith(country.toLowerCase())\n  ) {\n    return city;\n  }\n\n  return country ? `${city}, ${country}` : city;\n}\n\nfor (const result of results) {\n  let profile = {};\n\n  try {\n    let content = result.content;\n\n    if (typeof content === 'string') {\n      content = content.trim();\n\n      // Remove markdown code fences\n      content = content\n        .replace(/^```json\\s*/i, '')\n        .replace(/^```\\s*/i, '')\n        .replace(/\\s*```$/i, '')\n        .trim();\n\n      profile = JSON.parse(content);\n    } else {\n      profile = content;\n    }\n\n    // ScrapeGraphAI may return an array\n    if (Array.isArray(profile)) {\n      profile = profile[0] || {};\n    }\n\n    // Safety check\n    if (!profile || typeof profile !== 'object') {\n      profile = {};\n    }\n\n  } catch (error) {\n    profile = {};\n  }\n\n  const rawTitle = result.title || '';\n\n  // Extract name/title from search result title\n  const titleParts = rawTitle\n    .split(' - ')\n    .map(part => part.trim())\n    .filter(Boolean);\n\n  const name =\n    profile.name ||\n    titleParts[0] ||\n    '';\n\n  const title =\n    profile.position ||\n    (\n      titleParts.length > 1\n        ? titleParts.slice(1).join(' - ')\n        : rawTitle\n    );\n\n  const company =\n    profile.current_company?.name ||\n    '';\n\n  const location = cleanLocation(profile);\n\n  const posts = Array.isArray(profile.posts)\n    ? profile.posts.map(post => ({\n        title: post.title || '',\n        content:\n          post.attribution ||\n          post.content ||\n          '',\n        url:\n          post.link ||\n          post.url ||\n          ''\n      }))\n    : [];\n\n  const linkedinUrl = cleanLinkedInUrl(\n    profile.url ||\n    result.url ||\n    ''\n  );\n\n  leads.push({\n    name: String(name).trim(),\n    title: String(title).trim(),\n    company: String(company).trim(),\n    location,\n    about: String(profile.about || '').trim(),\n    linkedin_url: linkedinUrl,\n    posts\n  });\n}\n\nreturn leads.map(lead => ({\n  json: lead\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -80
+      ],
+      "id": "0fbda726-0b82-4223-adc2-5fc5c2120bfc",
+      "name": "04 — Parse Lead Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItems = $input.all();\n\nconst searchData = $('02 — Prepare Search Filters').first().json;\n\nconst jobTitle = String(\n  searchData.job_title ??\n  searchData.jobTitle ??\n  ''\n).trim().toLowerCase();\n\nconst keyword = String(\n  searchData.keywords ??\n  searchData.keyword ??\n  searchData.industry ??\n  ''\n).trim().toLowerCase();\n\nconst location = String(\n  searchData.location ?? ''\n).trim().toLowerCase();\n\nfunction normalize(value) {\n  return String(value ?? '')\n    .toLowerCase()\n    .trim();\n}\n\n/*\n * Broad geographic regions.\n * These are used only for validation after ScrapeGraphAI\n * has already performed the actual search.\n */\nconst regions = {\n  europe: [\n    'albania','andorra','austria','belarus','belgium','bosnia',\n    'bulgaria','croatia','cyprus','czech republic','denmark',\n    'estonia','finland','france','germany','greece','hungary',\n    'iceland','ireland','italy','kosovo','latvia','liechtenstein',\n    'lithuania','luxembourg','malta','moldova','monaco',\n    'montenegro','netherlands','north macedonia','norway',\n    'poland','portugal','romania','russia','san marino',\n    'serbia','slovakia','slovenia','spain','sweden','switzerland',\n    'ukraine','united kingdom','uk','vatican'\n  ],\n\n  asia: [\n    'afghanistan','armenia','azerbaijan','bahrain','bangladesh',\n    'bhutan','brunei','cambodia','china','georgia','india',\n    'indonesia','iran','iraq','israel','japan','jordan',\n    'kazakhstan','kuwait','kyrgyzstan','laos','lebanon',\n    'malaysia','maldives','mongolia','myanmar','nepal',\n    'north korea','oman','pakistan','philippines','qatar',\n    'saudi arabia','singapore','south korea','sri lanka',\n    'syria','taiwan','tajikistan','thailand','timor-leste',\n    'turkey','turkmenistan','united arab emirates','uae',\n    'uzbekistan','vietnam','yemen'\n  ],\n\n  africa: [\n    'algeria','angola','benin','botswana','burkina faso',\n    'burundi','cameroon','cape verde','central african republic',\n    'chad','comoros','congo','djibouti','egypt','eritrea',\n    'eswatini','ethiopia','gabon','gambia','ghana','guinea',\n    'kenya','lesotho','liberia','libya','madagascar','malawi',\n    'mali','mauritania','mauritius','morocco','mozambique',\n    'namibia','niger','nigeria','rwanda','senegal','seychelles',\n    'sierra leone','somalia','south africa','south sudan',\n    'sudan','tanzania','togo','tunisia','uganda','zambia',\n    'zimbabwe'\n  ],\n\n  'north america': [\n    'canada','united states','usa','mexico','greenland',\n    'costa rica','panama','guatemala','belize','honduras',\n    'el salvador','nicaragua','cuba','jamaica',\n    'dominican republic','haiti','bahamas'\n  ],\n\n  'south america': [\n    'argentina','bolivia','brazil','chile','colombia',\n    'ecuador','guyana','paraguay','peru','suriname',\n    'uruguay','venezuela'\n  ],\n\n  'oceania': [\n    'australia','new zealand','fiji','papua new guinea',\n    'samoa','tonga','vanuatu','solomon islands',\n    'micronesia','palau','kiribati','tuvalu','nauru'\n  ]\n};\n\nconst worldwideTerms = [\n  'worldwide',\n  'world',\n  'global',\n  'anywhere',\n  'everywhere',\n  'all countries',\n  'international'\n];\n\nfunction locationMatches(leadLocation) {\n  const candidate = normalize(leadLocation);\n\n  // Empty location input means no geographic restriction.\n  if (!location) return true;\n\n  // Worldwide/global search means no geographic restriction.\n  if (worldwideTerms.includes(location)) return true;\n\n  if (!candidate) return false;\n\n  // Direct match: country, city, state, etc.\n  if (candidate.includes(location)) {\n    return true;\n  }\n\n  // Broad region / continent match.\n  const countries = regions[location];\n\n  if (countries) {\n    return countries.some(country =>\n      candidate.includes(country)\n    );\n  }\n\n  /*\n   * If the user enters an unfamiliar broad geographic term,\n   * don't automatically reject every ScrapeGraph result.\n   * ScrapeGraphAI already used the user's location in discovery.\n   */\n  return true;\n}\n\nfunction titleMatches(lead) {\n  if (!jobTitle) return true;\n\n  const text = [\n    lead.name,\n    lead.title,\n    lead.about,\n    lead.company\n  ]\n    .map(normalize)\n    .join(' ');\n\n  return text.includes(jobTitle);\n}\n\nfunction keywordMatches(lead) {\n  if (!keyword) return true;\n\n  const postsText = Array.isArray(lead.posts)\n    ? lead.posts\n        .map(post =>\n          `${post?.title ?? ''} ${post?.content ?? ''}`\n        )\n        .join(' ')\n    : '';\n\n  const text = [\n    lead.name,\n    lead.title,\n    lead.company,\n    lead.about,\n    postsText\n  ]\n    .map(normalize)\n    .join(' ');\n\n  return text.includes(keyword);\n}\n\nconst seen = new Set();\nconst filtered = [];\n\nfor (const item of inputItems) {\n  const lead = item.json;\n\n  const linkedinUrl = normalize(lead.linkedin_url);\n\n  // LinkedIn URL is the minimum useful identity for a lead.\n  if (!linkedinUrl || seen.has(linkedinUrl)) {\n    continue;\n  }\n\n  const titleMatch = titleMatches(lead);\n  const locationMatch = locationMatches(lead.location);\n  const keywordMatch = keywordMatches(lead);\n\n  if (\n    titleMatch &&\n    locationMatch &&\n    keywordMatch\n  ) {\n    seen.add(linkedinUrl);\n\n    filtered.push({\n      json: {\n        ...lead,\n\n        // Explicitly preserve these fields for downstream nodes.\n        name: lead.name ?? '',\n        title: lead.title ?? '',\n        company: lead.company ?? '',\n        location: lead.location ?? '',\n        about: lead.about ?? '',\n        linkedin_url: lead.linkedin_url ?? '',\n        posts: lead.posts ?? []\n      }\n    });\n  }\n}\n\nreturn filtered;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -80
+      ],
+      "id": "6c0d97b2-6f0b-4b57-bbde-0fda823181ed",
+      "name": "05 — Filter Leads",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $input.all();\n\nconst urls = leads\n  .map(item => item.json.linkedin_url)\n  .filter(url => typeof url === 'string' && url.trim() !== '');\n\nreturn [\n  {\n    json: {\n      urls\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -80
+      ],
+      "id": "a2bb0bb0-79dc-4568-a790-0c5adb0c8ee9",
+      "name": "06 — Prepare Email Lookup"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/harvestapi~linkedin-profile-scraper/run-sync-get-dataset-items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer a"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"profileScraperMode\": \"Profile details + email search ($10 per 1k)\",\n  \"queries\": {{ JSON.stringify($json.urls) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1232,
+        -80
+      ],
+      "id": "e3a49f43-ed6d-4d10-b22b-f67d83afe9ba",
+      "name": "07 — Apify — Find Emails",
+      "alwaysOutputData": false,
+      "retryOnFail": false,
+      "waitBetweenTries": 1,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-flash-lite-latest",
+          "mode": "list",
+          "cachedResultName": "models/gemini-flash-lite-latest"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a professional B2B sales outreach assistant.\n\nCreate a concise, natural cold email using ONLY information explicitly provided in the LEAD DATA below.\n\nLEAD DATA:\nFirst Name: {{ $json.firstName || $json.first_name || $json.name }}\nLast Name: {{ $json.lastName || $json.last_name }}\nCompany: {{ $json.company || $json.companyName }}\nEmail: {{ $json.email }}\nLinkedIn: {{ $json.linkedin_url }}\nHeadline: {{ $json.headline }}\n\nSTRICT RULES:\n\n1. Address the recipient by first name.\n2. Mention the company only when a company name is explicitly provided.\n3. You may reference the headline only when it is explicitly provided.\n4. Do NOT infer information from a job title.\n5. Do NOT invent or assume:\n   - company history\n   - funding\n   - investors\n   - products\n   - customers\n   - achievements\n   - technologies\n   - responsibilities\n   - statistics\n   - goals\n   - priorities\n   - recent events\n6. Do NOT say you have been following, researching, or recently discovered the person.\n7. Do NOT claim knowledge about what the recipient is currently working on unless it is explicitly stated in the provided data.\n8. Do NOT invent information about the sender, sender's company, services, products, tools, or capabilities.\n9. Do NOT use phrases such as \"I work with leadership teams\" unless that information is explicitly provided.\n10. If there is insufficient information for personalization, write a simple professional introduction instead of guessing.\n11. Keep the email around 70–100 words.\n12. Make it sound like a real human wrote it.\n13. Keep it professional and conversational, not overly salesy.\n14. Include one clear, low-pressure call to action.\n15. Do not mention AI or this prompt.\n16. Do not add \"[Your Name]\" or any placeholder.\n17. End naturally without inventing a sender identity.\n18. Create a concise subject line.\n\nReturn ONLY valid JSON.\nDo not use markdown.\nDo not use code fences.\n\nRequired format:\n\n{\n  \"subject\": \"Short subject line\",\n  \"body\": \"Email body\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        176,
+        160
+      ],
+      "id": "d7c560fc-d81038797da4",
+      "name": "08 — Generate Lead Email",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiItems = $input.all();\n\nconst apifyItems = $('If').all();\nconst originalLeads = $('05 — Filter Leads').all();\n\nfunction normalizeUrl(value) {\n  return String(value || '')\n    .toLowerCase()\n    .trim()\n    .replace(/\\/$/, '');\n}\n\nreturn geminiItems.map((item, index) => {\n  const rawText = item.json?.content?.parts?.[0]?.text;\n\n  if (!rawText) {\n    throw new Error(`Gemini response missing for item ${index + 1}`);\n  }\n\n  let generated;\n\n  try {\n    generated = JSON.parse(rawText);\n  } catch (error) {\n    throw new Error(\n      `Invalid Gemini JSON for item ${index + 1}: ${rawText}`\n    );\n  }\n\n  const apifyLead = apifyItems[index]?.json || {};\n\n  const apifyLinkedIn = normalizeUrl(\n    apifyLead.linkedinUrl ||\n    apifyLead.linkedin_url ||\n    apifyLead.linkedin\n  );\n\n  // Find the original clean ScrapeGraph lead\n  const originalLead =\n    originalLeads.find(item => {\n      const url = normalizeUrl(item.json?.linkedin_url);\n      return url && url === apifyLinkedIn;\n    })?.json || {};\n\n  const email =\n    apifyLead.emails?.[0]?.email ||\n    apifyLead.email ||\n    '';\n\n  const name =\n    originalLead.name ||\n    apifyLead.firstName ||\n    apifyLead.first_name ||\n    `${apifyLead.firstName || ''} ${apifyLead.lastName || ''}`.trim();\n\n  const title =\n    originalLead.title ||\n    apifyLead.headline ||\n    apifyLead.title ||\n    '';\n\n  const company =\n    originalLead.company ||\n    apifyLead.company ||\n    apifyLead.companyName ||\n    '';\n\n  const location =\n    typeof originalLead.location === 'string'\n      ? originalLead.location\n      : '';\n\n  const linkedin =\n    originalLead.linkedin_url ||\n    apifyLead.linkedinUrl ||\n    apifyLead.linkedin_url ||\n    '';\n\n  return {\n    json: {\n      name,\n      title,\n      company,\n      location,\n      email,\n      linkedin_url: linkedin,\n      subject: generated.subject || '',\n      body: generated.body || ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        160
+      ],
+      "id": "0f2e2b85834d9",
+      "name": "09 — Prepare Lead Email"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1dc3c1c4-aa43-47f4-bd6b-b6fc6ad2b2ac",
+              "leftValue": "={{ $json.emails?.[0]?.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16,
+        176
+      ],
+      "id": "58ec64b5-09b8-4418-87e9-913985bf02df",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{$json.subject}}",
+        "message": "={{$json.body}}",
+        "options": {
+          "sendTo": "={{$json.email}}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        704,
+        160
+      ],
+      "id": "bef4b0a2-",
+      "name": "10 — Draft Lead Email",
+      "webhookId": "3fd01-8bbf-",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-review",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        512
+      ],
+      "id": "7e7ffa8c-e4b5-4abd-9403-19e8e4bb21bc",
+      "name": "01 — Webhook — Load Drafts",
+      "webhookId": "55b4c8a3-43c0-4273-ada6-0e4563df0bd0"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Drafted"
+            },
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Edited"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        160,
+        512
+      ],
+      "id": "a0b1ce12-3b9e20886",
+      "name": "02 — Get Draft Rows",
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const row = item.json;\n\n  return {\n    json: {\n      \"Name\": row[\"Name\"] || \"\",\n      \"Email\": row[\"Email\"] || \"\",\n      \"Company\": row[\"Company\"] || \"\",\n      \"LinkedIn URL\": row[\"LinkedIn URL\"] || \"\",\n      \"Subject\": row[\"Subject\"] || \"\",\n      \"Body\": row[\"Body\"] || \"\",\n      \"Gmail Draft ID\": row[\"Gmail Draft ID\"] || \"\",\n      \"Status\": row[\"Status\"] || \"\",\n      \"Drafted At\": row[\"Drafted At\"] || \"\",\n      \"Sent At\": row[\"Sent At\"] || \"\",\n      \"Cancelled At\": row[\"Cancelled At\"] || \"\"\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        512
+      ],
+      "id": "ec857958-e5ff-4a24-842b-2ab74b64e439",
+      "name": "03 — Format Drafts"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $input.all().map(item => item.json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        512
+      ],
+      "id": "fe6153c2-c00d-465e-85cb-3a4a305c902e",
+      "name": "04 — Return Drafts to Frontend"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "draft-action",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        720
+      ],
+      "id": "5b99c4ff-eff2-4670-a2e9-7e7f6e972fd8",
+      "name": "05 — Webhook — Draft Action",
+      "webhookId": "f2bfcbd4-a94d-496e-8a08-d0b50fc60f9e"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Gmail Draft ID",
+              "lookupValue": "={{$json.body.draftId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        160,
+        720
+      ],
+      "id": "ea2c5ed7-ac81-4c56-bb64-d948c327a624",
+      "name": "06 — Find Draft",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('05 — Webhook — Draft Action').item.json.body.action }}",
+                    "rightValue": "cancel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ad7f6b4c-acc8-4a22-84ee-3aaec1989071"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CANCEL"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f170dd1b-13d9-4371-8ba0-dad97cb28ec0",
+                    "leftValue": "={{ $('05 — Webhook — Draft Action').item.json.body.action }}",
+                    "rightValue": "edit",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EDIT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9cbd2866-00b7-4611-8a5a-763f38de89e5",
+                    "leftValue": "={{ $('05 — Webhook — Draft Action').item.json.body.action }}",
+                    "rightValue": "send",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SEND"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        352,
+        704
+      ],
+      "id": "8007403a-f55f-44a8-a515-a643c6518bd3",
+      "name": "07 — Check Action"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Nfy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Body",
+              "displayName": "Body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail Draft ID",
+              "displayName": "Gmail Draft ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Drafted At",
+              "displayName": "Drafted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Cancelled At",
+              "displayName": "Cancelled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1136,
+        160
+      ],
+      "id": "e6ab33ed-1b7c-45e1-85f7-ce18e0ce2713",
+      "name": "12 - Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const apifyLeads = $input.all();\nconst originalLeads = $('05 — Filter Leads').all();\n\nreturn apifyLeads.map(item => {\n  const apifyLead = item.json || {};\n\n  const apifyUrl = String(\n    apifyLead.linkedinUrl ||\n    apifyLead.linkedin_url ||\n    ''\n  )\n    .toLowerCase()\n    .replace(/\\/$/, '');\n\n  const originalLead = originalLeads.find(originalItem => {\n    const originalUrl = String(\n      originalItem.json.linkedin_url || ''\n    )\n      .toLowerCase()\n      .replace(/\\/$/, '');\n\n    return originalUrl === apifyUrl;\n  })?.json || {};\n\n  return {\n    json: {\n      Name:\n        originalLead.name ||\n        `${apifyLead.firstName || ''} ${apifyLead.lastName || ''}`.trim(),\n\n      Title:\n        originalLead.title ||\n        originalLead.headline ||\n        apifyLead.headline ||\n        apifyLead.title ||\n        '',\n\n      Email: 'Email not found',\n\n      Company:\n        originalLead.company ||\n        apifyLead.company ||\n        apifyLead.companyName ||\n        '',\n\n      Location:\n        originalLead.location ||\n        apifyLead.location ||\n        '',\n\n      'LinkedIn URL':\n        originalLead.linkedin_url ||\n        apifyLead.linkedinUrl ||\n        apifyLead.linkedin_url ||\n        '',\n\n      Subject: '',\n      Body: '',\n      'Gmail Draft ID': '',\n\n      Status: 'Email not found',\n\n      'Drafted At': '',\n      'Sent At': '',\n      'Cancelled At': ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        336
+      ],
+      "id": "e24c679e-c916-4edf-bada-b326e5eff99f",
+      "name": "08B — Prepare No Email Lead"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://v2-api.scrapegraphai.com/api/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "SGAI-APIKEY",
+              "value": "s"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": {{ JSON.stringify(`site:linkedin.com/in/ ${$json.job_title || ''} ${$json.industry || ''} ${$json.location || ''} ${$json.keywords || ''}`) }},\n  \"numResults\": {{ $json.max_results || 5 }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        416,
+        -80
+      ],
+      "id": "3a6cdaca-97f9-45f4-9dd3-3a8d5c673c72",
+      "name": "03 — Scrape Leads — ScrapeGraphAI1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst webhook = $('05 — Webhook — Draft Action').first().json.body || {};\n\nreturn items.map(item => {\n  const row = item.json || {};\n\n  const draftId = String(\n    row['Gmail Draft ID'] || webhook.draftId || ''\n  ).trim();\n\n  const email = String(row.Email || '').trim();\n\n  const subject = String(\n    webhook.subject ?? row.Subject ?? ''\n  );\n\n  const body = String(\n    webhook.body ?? row.Body ?? ''\n  );\n\n  if (!draftId) {\n    throw new Error('Missing Gmail Draft ID');\n  }\n\n  if (!email) {\n    throw new Error('Missing recipient email');\n  }\n\n  const mime = [\n    `To: ${email}`,\n    `Subject: ${subject}`,\n    'MIME-Version: 1.0',\n    'Content-Type: text/plain; charset=\"UTF-8\"',\n    'Content-Transfer-Encoding: 8bit',\n    '',\n    body\n  ].join('\\r\\n');\n\n  const raw = Buffer\n    .from(mime, 'utf8')\n    .toString('base64')\n    .replace(/\\+/g, '-')\n    .replace(/\\//g, '_')\n    .replace(/=+$/g, '');\n\n  return {\n    json: {\n      ...row,\n      editDraftId: draftId,\n      editSubject: subject,\n      editBody: body,\n      gmailRaw: raw\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        720
+      ],
+      "id": "9de8eace-898c-4d65-9de9-a3963867fdc3",
+      "name": "08 — Prepare Gmail Draft Edit"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/drafts/{{$json.editDraftId}}",
+        "authentication": "predefinialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": \"{{ $json.editDraftId }}\",\n  \"message\": {\n    \"raw\": \"{{ $json.gmailRaw }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1024,
+        720
+      ],
+      "id": "",
+      "name": "09 — Update Gmail Draft",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Edited",
+            "Gmail Draft ID": "={{ $('08 — Prepare Gmail Draft Edit').item.json.editDraftId }}",
+            "Subject": "={{ $('08 — Prepare Gmail Draft Edit').item.json.editSubject }}",
+            "Body": "={{ $('08 — Prepare Gmail Draft Edit').item.json.editBody }}"
+          },
+          "matchingColumns": [
+            "Gmail Draft ID"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Body",
+              "displayName": "Body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail Draft ID",
+              "displayName": "Gmail Draft ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Drafted At",
+              "displayName": "Drafted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Cancelled At",
+              "displayName": "Cancelled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        720
+      ],
+      "id": "365344b7--4463-a1b",
+      "name": "10 — Update Sheet — Edited",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  action: $('05 — Webhook — Draft Action').first().json.body.action || '',\n  draftId: $('05 — Webhook — Draft Action').first().json.body.draftId || '',\n  status: $json.Status || '',\n  email: $json.Email || '',\n  subject:\n    $json.Subject ||\n    $('05 — Webhook — Draft Action').first().json.body.subject ||\n    '',\n  body:\n    $json.Body ||\n    $('05 — Webhook — Draft Action').first().json.body.body ||\n    '',\n  sentAt: $json['Sent At'] || '',\n  cancelledAt: $json['Cancelled At'] || ''\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1536,
+        720
+      ],
+      "id": "6",
+      "name": "11 — Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/drafts/{{$json['Gmail Draft ID']}}",
+        "authentication": "preedentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1024,
+        512
+      ],
+      "id": "8",
+      "name": "08 — Cancel Gmail Draft1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Cancelled",
+            "Gmail Draft ID": "={{ $('07 — Check Action').item.json['Gmail Draft ID'] }}",
+            "Cancelled At": "={{ $now.toISOString() }}"
+          },
+          "matchingColumns": [
+            "Gmail Draft ID"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Body",
+              "displayName": "Body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Gmail Draft ID",
+              "displayName": "Gmail Draft ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Drafted At",
+              "displayName": "Drafted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Cancelled At",
+              "displayName": "Cancelled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        512
+      ],
+      "id": "261ad690-7116-42c1-be38-7fc6b3ee0fe9",
+      "name": "10 — Update Sheet — Cancelled",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/drafts/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": \"{{ $json['Gmail Draft ID'] }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1024,
+        928
+      ],
+      "id": "14c9cc662c",
+      "name": "08 — Send Gmail Draft1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Sent",
+            "Gmail Draft ID": "={{ $('07 — Check Action').item.json['Gmail Draft ID'] }}",
+            "Sent At": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "Gmail Draft ID"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Body",
+              "displayName": "Body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Gmail Draft ID",
+              "displayName": "Gmail Draft ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Drafted At",
+              "displayName": "Drafted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Cancelled At",
+              "displayName": "Cancelled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        928
+      ],
+      "id": "c7c40b48-4a8b-446a-8d42-429df76e0337",
+      "name": "10 — Update Sheet — Sent",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY",
+          "mode": "list",
+          "cachedResultName": "NovaTech Lead Outreach Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NfNtKuSy0x5qaG_aF_2ESlmPBWNvD3loSfgtGTkwNrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Body",
+              "displayName": "Body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Gmail Draft ID",
+              "displayName": "Gmail Draft ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Drafted At",
+              "displayName": "Drafted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Cancelled At",
+              "displayName": "Cancelled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1024,
+        336
+      ],
+      "id": "007bfb85-c584-46c5c9",
+      "name": "12 - Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1408,
+        160
+      ],
+      "id": "cabc1f26b",
+      "name": "13 — Merge Search Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn [\n  {\n    json: {\n      success: true,\n      leads: items.map(item => item.json)\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        160
+      ],
+      "id": "de7785a4-2663-4908-8641-1f2eab8d9d2b",
+      "name": "14 — Build Search Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const drafts = $input.all();\nconst leads = $('09 — Prepare Lead Email').all();\n\nreturn drafts.map((draftItem, index) => {\n  const lead = leads[index]?.json || {};\n  const draft = draftItem.json || {};\n\n  return {\n    json: {\n      Name: lead.name || '',\n      Title: lead.title || '',\n      Email: lead.email || '',\n      Company: lead.company || '',\n      Location: lead.location || '',\n      'LinkedIn URL': lead.linkedin_url || '',\n      Subject: lead.subject || '',\n      Body: lead.body || '',\n\n      'Gmail Draft ID': draft.id || '',\n\n      Status: 'Drafted',\n      'Drafted At': new Date().toISOString(),\n      'Sent At': '',\n      'Cancelled At': ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        160
+      ],
+      "id": "996c68e8-466a-467b-a365-317aca508c95",
+      "name": "11 — Prepare Drafted Lead for Sheet"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "01 — Webhook — Search Leads": {
+      "main": [
+        [
+          {
+            "node": "02 — Prepare Search Filters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 — Prepare Search Filters": {
+      "main": [
+        [
+          {
+            "node": "03 — Scrape Leads — ScrapeGraphAI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 — Parse Lead Results": {
+      "main": [
+        [
+          {
+            "node": "05 — Filter Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 — Filter Leads": {
+      "main": [
+        [
+          {
+            "node": "06 — Prepare Email Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 — Apify — Find Emails": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 — Prepare Email Lookup": {
+      "main": [
+        [
+          {
+            "node": "07 — Apify — Find Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 — Generate Lead Email": {
+      "main": [
+        [
+          {
+            "node": "09 — Prepare Lead Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 — Prepare Lead Email": {
+      "main": [
+        [
+          {
+            "node": "10 — Draft Lead Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "08 — Generate Lead Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "08B — Prepare No Email Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 — Draft Lead Email": {
+      "main": [
+        [
+          {
+            "node": "11 — Prepare Drafted Lead for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01 — Webhook — Load Drafts": {
+      "main": [
+        [
+          {
+            "node": "02 — Get Draft Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 — Get Draft Rows": {
+      "main": [
+        [
+          {
+            "node": "03 — Format Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 — Format Drafts": {
+      "main": [
+        [
+          {
+            "node": "04 — Return Drafts to Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 — Webhook — Draft Action": {
+      "main": [
+        [
+          {
+            "node": "06 — Find Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 — Find Draft": {
+      "main": [
+        [
+          {
+            "node": "07 — Check Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 — Check Action": {
+      "main": [
+        [
+          {
+            "node": "08 — Cancel Gmail Draft1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "08 — Prepare Gmail Draft Edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "08 — Send Gmail Draft1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08B — Prepare No Email Lead": {
+      "main": [
+        [
+          {
+            "node": "12 - Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 — Scrape Leads — ScrapeGraphAI1": {
+      "main": [
+        [
+          {
+            "node": "04 — Parse Lead Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 — Prepare Gmail Draft Edit": {
+      "main": [
+        [
+          {
+            "node": "09 — Update Gmail Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 — Update Gmail Draft": {
+      "main": [
+        [
+          {
+            "node": "10 — Update Sheet — Edited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 — Update Sheet — Edited": {
+      "main": [
+        [
+          {
+            "node": "11 — Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 — Cancel Gmail Draft1": {
+      "main": [
+        [
+          {
+            "node": "10 — Update Sheet — Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 — Send Gmail Draft1": {
+      "main": [
+        [
+          {
+            "node": "10 — Update Sheet — Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 — Update Sheet — Sent": {
+      "main": [
+        [
+          {
+            "node": "11 — Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 — Update Sheet — Cancelled": {
+      "main": [
+        [
+          {
+            "node": "11 — Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 - Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "13 — Merge Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 - Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "13 — Merge Search Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "13 — Merge Search Results": {
+      "main": [
+        [
+          {
+            "node": "14 — Build Search Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 — Prepare Drafted Lead for Sheet": {
+      "main": [
+        [
+          {
+            "node": "12 - Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9f580d02-3d62-47f7-86f3-47109da945c6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a862b86a31a9e67e99d37f3644f58857e6629c859f9f413c9d3e103ef1954a4"
+  },
+  "nodeGroups": [],
+  "id": "NQ6JZjjI6qg55AGP",
+  "tags": []
+}

@@ -1,59 +1,50 @@
-# Nova AI Lead Outreach Automation
 
-An AI-powered lead discovery and outreach platform that automates
-prospect discovery, profile enrichment, email generation, Gmail drafting,
-and human-reviewed outreach.
+---
 
-## Architecture
+LinkedIn Lead Scraper & Outreach Automation
 
-Lead Search
-↓
-ScrapeGraphAI
-↓
-Lead Filtering
-↓
-Apify Email Enrichment
-↓
-Gemini Personalization
-↓
-Gmail Draft
-↓
-Google Sheets
-↓
-Human Review
-├── Edit
-├── Send
-└── Cancel
+This one should be a little stronger because it is one of your more complex portfolio projects.
 
-## Tech Stack
+```markdown
+# LinkedIn Lead Scraper & Outreach Automation
 
-- n8n
-- Gemini
-- ScrapeGraphAI
-- Apify
-- Gmail API
-- Google Sheets API
-- Webhooks
-- React
-- JavaScript
-- Lovable
+An end-to-end AI-powered lead generation and outreach automation platform built using **n8n, ScrapeGraphAI, Apify, Gemini, Gmail API, Google Sheets API, Webhooks, and Lovable**.
 
-## Key Features
+The system automates the process of finding LinkedIn leads, enriching them with email information, generating personalized outreach messages, creating Gmail drafts, and tracking the complete workflow in Google Sheets.
 
-- LinkedIn lead discovery
-- Email enrichment
-- AI-generated personalized outreach
-- Email-found / email-not-found handling
-- Gmail draft creation
-- Human approval workflow
-- Draft editing
-- Draft cancellation
-- Draft sending
-- Google Sheets status tracking
-- Frontend/backend webhook integration
+---
 
-## Project Structure
+## Overview
 
-- `src/` - Lovable/React frontend
-- `n8n/` - sanitized n8n automation workflow
-- `docs/` - architecture diagrams and screenshots
+The platform connects lead discovery, data enrichment, AI-generated outreach, email drafting, and human review into a single automated workflow.
+
+### Main Workflow
+
+```text
+Lovable Frontend
+      ↓
+Search Leads Webhook
+      ↓
+Prepare Search Filters
+      ↓
+LinkedIn Lead Search
+      ↓
+Parse Lead Results
+      ↓
+Filter / Validate Leads
+      ↓
+Email Enrichment
+      ↓
+ ┌───────────────┐
+ │ Email Found?  │
+ └───────┬───────┘
+      Yes│       │No
+         ↓       ↓
+  Generate AI   Mark Email
+     Email      Not Found
+         ↓       ↓
+      Gmail Draft
+         ↓
+      Google Sheets
+         ↓
+    Lead Management
